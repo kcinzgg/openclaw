@@ -570,7 +570,12 @@ export async function textToSpeech(params: {
         const tempRoot = resolvePreferredOpenClawTmpDir();
         mkdirSync(tempRoot, { recursive: true, mode: 0o700 });
         const tempDir = mkdtempSync(path.join(tempRoot, "tts-"));
+        // When the channel needs opus (e.g. Telegram, Feishu for native voice),
+        // override Edge output to opus unless the user explicitly configured a format.
         let edgeOutputFormat = resolveEdgeOutputFormat(config);
+        if (output.voiceCompatible && !config.edge.outputFormatConfigured) {
+          edgeOutputFormat = "audio-24khz-16bit-mono-opus";
+        }
         const fallbackEdgeOutputFormat =
           edgeOutputFormat !== DEFAULT_EDGE_OUTPUT_FORMAT ? DEFAULT_EDGE_OUTPUT_FORMAT : undefined;
 
