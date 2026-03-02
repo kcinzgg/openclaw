@@ -532,6 +532,13 @@ function formatTtsProviderError(provider: TtsProvider, err: unknown): string {
   return `${provider}: ${error.message}`;
 }
 
+function buildTtsFailureResult(errors: string[]): { success: false; error: string } {
+  return {
+    success: false,
+    error: `TTS conversion failed: ${errors.join("; ") || "no providers available"}`,
+  };
+}
+
 export async function textToSpeech(params: {
   text: string;
   cfg: OpenClawConfig;
@@ -701,10 +708,7 @@ export async function textToSpeech(params: {
     }
   }
 
-  return {
-    success: false,
-    error: `TTS conversion failed: ${errors.join("; ") || "no providers available"}`,
-  };
+  return buildTtsFailureResult(errors);
 }
 
 export async function textToSpeechTelephony(params: {
@@ -790,10 +794,7 @@ export async function textToSpeechTelephony(params: {
     }
   }
 
-  return {
-    success: false,
-    error: `TTS conversion failed: ${errors.join("; ") || "no providers available"}`,
-  };
+  return buildTtsFailureResult(errors);
 }
 
 export async function maybeApplyTtsToPayload(params: {
