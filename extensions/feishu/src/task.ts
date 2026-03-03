@@ -71,22 +71,28 @@ async function createTask(
     body.due = params.due;
   }
 
-  const requestOpts: {
-    method: string;
-    url: string;
-    data: Record<string, unknown>;
-    params?: Record<string, string>;
-  } = {
-    method: "POST",
+  // user_id_type is required by Feishu API; default open_id when not specified
+  const requestOpts = {
+    method: "POST" as const,
     url: "/open-apis/task/v1/tasks",
     data: body,
+    params: { user_id_type: params.user_id_type ?? "open_id" },
   };
-  if (params.user_id_type) {
-    requestOpts.params = { user_id_type: params.user_id_type };
-  }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK generic request
-  const res = (await (client as any).request(requestOpts)) as LarkTaskResponse;
+  let res: LarkTaskResponse;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK generic request
+    res = (await (client as any).request(requestOpts)) as LarkTaskResponse;
+  } catch (err: unknown) {
+    // SDK may throw on HTTP 4xx; surface Feishu error body if present
+    const data = (err as { response?: { data?: { code?: number; msg?: string } } })?.response?.data;
+    if (data && typeof data.msg === "string") {
+      throw new Error(
+        `Feishu task API: ${data.msg}${data.code != null ? ` (code=${data.code})` : ""}`,
+      );
+    }
+    throw err;
+  }
 
   if (res.code !== 0) {
     throw new Error(res.msg ?? `Feishu task API error: code=${res.code}`);
