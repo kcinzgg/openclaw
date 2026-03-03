@@ -38,15 +38,23 @@ export const FeishuTaskSchema = Type.Object({
   ),
   due: Type.Optional(
     Type.String({
-      description:
-        "Due time (ISO 8601 or Unix timestamp string). Example: 2025-12-31T23:59:59+08:00",
+      description: 'Due time (Unix timestamp in ms as string). Example: "1675742789470"',
     }),
+  ),
+  members: Type.Optional(
+    Type.Array(
+      Type.Object({
+        id: Type.String({ description: "User ID" }),
+        role: Type.Optional(Type.String({ description: "Role: member (assignee) or follower" })),
+      }),
+      { description: "Task members (assignees/followers)" },
+    ),
   ),
   user_id_type: Type.Optional(
     Type.Unsafe<(typeof USER_ID_TYPE_VALUES)[number]>({
       type: "string",
       enum: [...USER_ID_TYPE_VALUES],
-      description: "User ID type for collaborators/followers (default: open_id)",
+      description: "User ID type for members (default: open_id)",
     }),
   ),
   accountId: Type.Optional(
@@ -56,7 +64,7 @@ export const FeishuTaskSchema = Type.Object({
 
 export type FeishuTaskParams = Static<typeof FeishuTaskSchema>;
 
-/** Call Feishu Task v1 create API. Uses tenant_access_token via SDK client.request. */
+/** Call Feishu Task v2 create API. Uses tenant_access_token via SDK client.request. */
 async function createTask(
   client: Lark.Client,
   params: FeishuTaskParams,
@@ -67,23 +75,28 @@ async function createTask(
   if (params.description !== undefined && params.description !== "") {
     body.description = params.description;
   }
+  if (params.due !== undefined && params.due !== "") {
+    body.due = { timestamp: params.due };
+  }
+  if (params.members && params.members.length > 0) {
+    body.members = params.members;
+  }
 
-  // user_id_type is required by Feishu API; default open_id when not specified
   const requestOpts = {
     method: "POST" as const,
     url: "/open-apis/task/v2/tasks",
     data: body,
   };
+  const query: Record<string, string> = {};
   if (params.user_id_type) {
-    (requestOpts as any).params = { user_id_type: params.user_id_type };
+    query.user_id_type = params.user_id_type;
   }
 
   let res: LarkTaskResponse;
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK generic request
-    res = (await (client as any).request(requestOpts)) as LarkTaskResponse;
+    res = (await (client as any).request(requestOpts, { params: query })) as LarkTaskResponse;
   } catch (err: unknown) {
-    // SDK may throw on HTTP 4xx; surface Feishu error body if present
     const data = (err as { response?: { data?: { code?: number; msg?: string } } })?.response?.data;
     if (data && typeof data.msg === "string") {
       throw new Error(
@@ -136,7 +149,7 @@ export function registerFeishuTaskTools(api: OpenClawPluginApi) {
       name: "feishu_task",
       label: "Feishu Task",
       description:
-        "Create a Feishu task. Requires Feishu app permission '查看、创建、编辑和删除飞书任务' and tools.task: true.",
+        "Create a Feishu task (Task v2). Requires Feishu app permission '查看、创建、编辑和删除飞书任务' and tools.task: true.",
       parameters: FeishuTaskSchema,
       async execute(_toolCallId, rawParams) {
         const params = rawParams as FeishuTaskParams;
