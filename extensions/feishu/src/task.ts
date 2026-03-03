@@ -71,7 +71,7 @@ async function createTask(
   // user_id_type is required by Feishu API; default open_id when not specified
   const requestOpts = {
     method: "POST" as const,
-    url: "/open-apis/task/v1/tasks",
+    url: "/open-apis/task/v2/tasks",
     data: body,
   };
   if (params.user_id_type) {
