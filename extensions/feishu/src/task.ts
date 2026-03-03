@@ -45,7 +45,7 @@ export const FeishuTaskSchema = Type.Object({
     Type.Array(
       Type.Object({
         id: Type.String({ description: "User ID" }),
-        role: Type.Optional(Type.String({ description: "Role: member (assignee) or follower" })),
+        role: Type.Optional(Type.String({ description: "Role: assignee or follower" })),
       }),
       { description: "Task members (assignees/followers)" },
     ),
