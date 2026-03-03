@@ -130,6 +130,8 @@ On **Permissions**, click **Batch import** and paste:
 
 ![Configure permissions](../images/feishu-step4-permissions.png)
 
+If you want the bot to **create Feishu tasks** (via the `feishu_task` tool), add the permission **查看、创建、编辑和删除飞书任务** (view, create, edit and delete Feishu tasks) in the Feishu Open Platform and set `tools.task: true` in your account config. See [Optional tools](#optional-tools).
+
 ### 5. Enable bot capability
 
 In **App Capability** > **Bot**:
@@ -531,6 +533,37 @@ Feishu supports streaming replies via interactive cards. When enabled, the bot u
 ```
 
 Set `streaming: false` to wait for the full reply before sending.
+
+### Optional tools
+
+The Feishu plugin can expose extra tools to the agent (doc, chat, wiki, drive, bitable, task). They are controlled per account via `channels.feishu.accounts.<id>.tools` or the top-level `channels.feishu.tools`. By default, doc, chat, wiki, drive and scopes are enabled; perm and task are disabled.
+
+| Tool          | Config key   | Description                        |
+| ------------- | ------------ | ---------------------------------- |
+| `feishu_task` | `tools.task` | Create Feishu tasks (Task Center). |
+
+To enable task creation:
+
+1. In Feishu Open Platform, add the permission **查看、创建、编辑和删除飞书任务** and publish the app.
+2. Set `tools.task: true` for the account, for example:
+
+```json5
+{
+  channels: {
+    feishu: {
+      accounts: {
+        main: {
+          appId: "cli_xxx",
+          appSecret: "xxx",
+          tools: { task: true },
+        },
+      },
+    },
+  },
+}
+```
+
+The agent can then use the `feishu_task` tool with `action: "create"` and a `summary` (and optional `description`, `due`) to create tasks.
 
 ### Multi-agent routing
 

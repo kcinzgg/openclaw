@@ -8,6 +8,7 @@ import { registerFeishuDriveTools } from "./src/drive.js";
 import { registerFeishuMessageTools } from "./src/message.js";
 import { registerFeishuPermTools } from "./src/perm.js";
 import { setFeishuRuntime } from "./src/runtime.js";
+import { registerFeishuTaskTools } from "./src/task.js";
 import { registerFeishuWikiTools } from "./src/wiki.js";
 
 export { monitorFeishuProvider } from "./src/monitor.js";
@@ -61,6 +62,7 @@ const plugin = {
     registerFeishuDriveTools(api);
     registerFeishuPermTools(api);
     registerFeishuBitableTools(api);
+    registerFeishuTaskTools(api);
   },
 };
 
