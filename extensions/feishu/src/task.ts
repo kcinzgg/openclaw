@@ -67,9 +67,13 @@ async function createTask(
   if (params.description !== undefined && params.description !== "") {
     body.description = params.description;
   }
+  // Remove complex due object for now to avoid validation errors
+  // unless we implement proper ISO8601 -> Unix timestamp + timezone logic.
+  /*
   if (params.due !== undefined && params.due !== "") {
     body.due = params.due;
   }
+  */
 
   // user_id_type is required by Feishu API; default open_id when not specified
   const requestOpts = {
