@@ -129,3 +129,6 @@ export function clearClientCache(accountId?: string): void {
     clientCache.clear();
   }
 }
+
+// Re-export user token helper for convenience
+export { getUserAccessToken } from "./user-auth.js";

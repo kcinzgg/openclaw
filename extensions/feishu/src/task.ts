@@ -2,8 +2,9 @@ import type * as Lark from "@larksuiteoapi/node-sdk";
 import { Type, type Static } from "@sinclair/typebox";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { listEnabledFeishuAccounts } from "./accounts.js";
-import { createFeishuToolClient } from "./tool-account.js";
+import { createFeishuToolClient, resolveFeishuToolAccount } from "./tool-account.js";
 import { resolveToolsConfig } from "./tools-config.js";
+import { getUserAccessToken } from "./user-auth.js";
 
 // ============ Helpers ============
 
@@ -35,12 +36,18 @@ async function taskRequest(
     url: string;
     data?: Record<string, unknown>;
     query?: Record<string, string>;
+    userToken?: string;
   },
 ): Promise<LarkApiResponse> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- access SDK internals
   const c = client as any;
   const domain: string = c.domain ?? "https://open.feishu.cn";
   const { headers } = await c.formatPayload({}, {});
+
+  // Override authorization with user_access_token when provided
+  if (opts.userToken) {
+    headers.Authorization = `Bearer ${opts.userToken}`;
+  }
 
   const url = opts.url.startsWith("http") ? opts.url : `${domain}/${opts.url.replace(/^\//, "")}`;
   const requestData = opts.method === "GET" ? undefined : opts.data;
@@ -115,7 +122,8 @@ export const FeishuTaskSchema = Type.Object({
   ),
   due: Type.Optional(
     Type.String({
-      description: 'Due time (Unix timestamp in ms as string). Example: "1675742789470"',
+      description:
+        'Due time as Unix timestamp string (seconds, e.g. "1675742789", or milliseconds, e.g. "1675742789470")',
     }),
   ),
   members: Type.Optional(
@@ -163,10 +171,14 @@ async function createTask(client: Lark.Client, params: FeishuTaskParams) {
     body.description = params.description;
   }
   if (params.due) {
-    body.due = { timestamp: params.due };
+    body.due = { timestamp: params.due, is_all_day: false };
   }
   if (params.members && params.members.length > 0) {
-    body.members = params.members;
+    body.members = params.members.map((m) => ({
+      id: m.id,
+      type: "user",
+      role: m.role ?? "assignee",
+    }));
   }
 
   const query: Record<string, string> = {};
@@ -213,7 +225,13 @@ async function getTask(client: Lark.Client, taskId: string, userIdType?: string)
 
 async function listTasks(
   client: Lark.Client,
-  opts: { pageSize?: number; pageToken?: string; completed?: boolean; userIdType?: string },
+  opts: {
+    pageSize?: number;
+    pageToken?: string;
+    completed?: boolean;
+    userIdType?: string;
+    userToken?: string;
+  },
 ) {
   const query: Record<string, string> = {};
   const pageSize = opts.pageSize ? Math.max(1, Math.min(100, opts.pageSize)) : 50;
@@ -232,6 +250,7 @@ async function listTasks(
     method: "GET",
     url: "/open-apis/task/v2/tasks",
     query,
+    userToken: opts.userToken,
   });
 
   return {
@@ -241,16 +260,35 @@ async function listTasks(
   };
 }
 
-async function updateTask(client: Lark.Client, taskId: string, params: FeishuTaskParams) {
+async function updateTask(
+  client: Lark.Client,
+  taskId: string,
+  params: FeishuTaskParams,
+  opts?: { userToken?: string },
+) {
+  // Per API docs, members/reminders/tasklists cannot be updated via PATCH;
+  // use add_members/remove_members endpoints instead.
   const body: Record<string, unknown> = {};
+  const updateFields: string[] = [];
+
   if (params.summary !== undefined) {
     body.summary = params.summary;
+    updateFields.push("summary");
   }
   if (params.description !== undefined) {
     body.description = params.description;
+    updateFields.push("description");
   }
   if (params.due !== undefined) {
-    body.due = params.due ? { timestamp: params.due } : null;
+    if (params.due) {
+      body.due = { timestamp: params.due, is_all_day: false };
+    }
+    // Setting update_fields without the field in body clears it
+    updateFields.push("due");
+  }
+
+  if (updateFields.length === 0) {
+    throw new Error("No fields to update. Provide at least one of: summary, description, due.");
   }
 
   const query: Record<string, string> = {};
@@ -261,8 +299,9 @@ async function updateTask(client: Lark.Client, taskId: string, params: FeishuTas
   const res = await taskRequest(client, {
     method: "PATCH",
     url: `/open-apis/task/v2/tasks/${taskId}`,
-    data: body,
+    data: { task: body, update_fields: updateFields },
     query,
+    userToken: opts?.userToken,
   });
 
   return res.data?.task ?? res.data;
@@ -295,10 +334,16 @@ async function addMembers(
     query.user_id_type = userIdType;
   }
 
+  const normalizedMembers = members.map((m) => ({
+    id: m.id,
+    type: "user",
+    role: m.role ?? "assignee",
+  }));
+
   const res = await taskRequest(client, {
     method: "POST",
     url: `/open-apis/task/v2/tasks/${taskId}/add_members`,
-    data: { members },
+    data: { members: normalizedMembers },
     query,
   });
 
@@ -365,6 +410,23 @@ export function registerFeishuTaskTools(api: OpenClawPluginApi) {
               return json(await getTask(client, params.task_id, params.user_id_type));
             }
             case "list": {
+              const account = resolveFeishuToolAccount({
+                api,
+                executeParams: { accountId: params.accountId },
+                defaultAccountId: ctx.agentAccountId,
+              });
+              const userToken = await getUserAccessToken(client, account.accountId);
+              if (!userToken) {
+                return json({
+                  error: "NOT_AUTHORIZED",
+                  message:
+                    "Feishu Task v2 list requires user OAuth authorization. " +
+                    "Tell the user to type the command: /feishu-auth " +
+                    "— this will generate an authorization link. " +
+                    "Do NOT fabricate or invent any URLs. " +
+                    "Alternative: use 'get' action with a known task_id.",
+                });
+              }
               try {
                 return json(
                   await listTasks(client, {
@@ -372,19 +434,19 @@ export function registerFeishuTaskTools(api: OpenClawPluginApi) {
                     pageToken: params.page_token,
                     completed: params.completed,
                     userIdType: params.user_id_type,
+                    userToken,
                   }),
                 );
               } catch (listErr) {
                 const msg = listErr instanceof Error ? listErr.message : String(listErr);
-                // Task v2 list requires user_access_token; bot (tenant) tokens are rejected
-                if (
-                  msg.includes("99991663") ||
-                  msg.includes("Invalid access token") ||
-                  msg.includes("HTTP 400")
-                ) {
+                if (msg.includes("99991663") || msg.includes("Invalid access token")) {
                   return json({
-                    error:
-                      "Feishu Task v2 list API requires user_access_token which bot apps cannot provide. Workaround: use 'get' with a known task_id, or track task_ids from 'create' responses.",
+                    error: "TOKEN_EXPIRED",
+                    message:
+                      "User access token expired or invalid. " +
+                      "Tell the user to type the command: /feishu-auth " +
+                      "— this will generate a new authorization link. " +
+                      "Do NOT fabricate or invent any URLs.",
                   });
                 }
                 throw listErr;
@@ -394,7 +456,16 @@ export function registerFeishuTaskTools(api: OpenClawPluginApi) {
               if (!params.task_id) {
                 return json({ error: "task_id is required for update action" });
               }
-              return json(await updateTask(client, params.task_id, params));
+              const updateAccount = resolveFeishuToolAccount({
+                api,
+                executeParams: { accountId: params.accountId },
+                defaultAccountId: ctx.agentAccountId,
+              });
+              const updateToken =
+                (await getUserAccessToken(client, updateAccount.accountId)) ?? undefined;
+              return json(
+                await updateTask(client, params.task_id, params, { userToken: updateToken }),
+              );
             }
             case "complete": {
               if (!params.task_id) {

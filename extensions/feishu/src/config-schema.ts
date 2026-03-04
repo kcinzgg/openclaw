@@ -90,6 +90,7 @@ const FeishuToolsConfigSchema = z
     perm: z.boolean().optional(), // Permission management (default: false, sensitive)
     scopes: z.boolean().optional(), // App scopes diagnostic (default: true)
     task: z.boolean().optional(), // Create/manage Feishu tasks (default: false)
+    message: z.boolean().optional(), // Message list/get operations (default: true)
   })
   .strict()
   .optional();
@@ -218,6 +219,8 @@ export const FeishuConfigSchema = z
     // Optimization flags
     typingIndicator: z.boolean().optional().default(true),
     resolveSenderNames: z.boolean().optional().default(true),
+    // OAuth callback URL for user_access_token authorization (e.g., "http://localhost:18789/plugins/feishu/oauth/callback")
+    oauthCallbackUrl: z.string().url().optional(),
     // Multi-account configuration
     accounts: z.record(z.string(), FeishuAccountConfigSchema.optional()).optional(),
   })

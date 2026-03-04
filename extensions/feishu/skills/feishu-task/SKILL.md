@@ -47,7 +47,7 @@ Returns full task details including summary, description, due, members, status.
 
 ### List Tasks
 
-> **Limitation**: The list action may fail with HTTP 400 when using bot (tenant) tokens. Feishu Task v2 list API may require `user_access_token`. If listing fails, use `get` with a known `task_id` instead, or retrieve task IDs from create responses.
+> **Requires OAuth**: The list action requires `user_access_token`. Run `/feishu-auth` to authorize first. If no user token is available, the tool returns a prompt to authorize.
 
 ```json
 { "action": "list" }
@@ -125,9 +125,16 @@ When `has_more` is `true` in a list response, pass the returned `page_token` to 
 
 Requires Feishu app permission: "查看、创建、编辑和删除飞书任务"
 
-## Limitations
+## User Authorization (OAuth)
 
-The current implementation uses `tenant_access_token` (bot identity). Most actions work with bot tokens, but `list` may require `user_access_token` which is not yet supported. Workaround: track task IDs from create responses and use `get` to retrieve individual tasks.
+The `list` action requires `user_access_token`. If the tool returns `NOT_AUTHORIZED` or `TOKEN_EXPIRED`:
+
+**IMPORTANT**: Tell the user to type the command `/feishu-auth` in the chat. This command will generate the real authorization link. Do NOT create, fabricate, or guess any authorization URLs yourself.
+
+After authorization:
+
+- Token is persisted and auto-refreshed (valid ~30 days)
+- Re-run `/feishu-auth force` to re-authorize if the refresh token expires
 
 ## Configuration
 
@@ -138,3 +145,11 @@ Enable in `channels.feishu.tools`:
 ```
 
 Disabled by default; must be explicitly enabled.
+
+For OAuth callback, optionally set `channels.feishu.oauthCallbackUrl`:
+
+```json
+{ "oauthCallbackUrl": "http://localhost:18789/plugins/feishu/oauth/callback" }
+```
+
+The callback URL must match the redirect URL configured in the Feishu Open Platform app settings.

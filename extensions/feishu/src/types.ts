@@ -83,6 +83,15 @@ export type FeishuToolsConfig = {
   task?: boolean;
 };
 
+/** Persisted user OAuth token data for user_access_token APIs. */
+export type FeishuUserToken = {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+  openId: string;
+  obtainedAt: number;
+};
+
 export type DynamicAgentCreationConfig = {
   enabled?: boolean;
   workspaceTemplate?: string;

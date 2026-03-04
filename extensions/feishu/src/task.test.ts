@@ -13,8 +13,16 @@ const createFeishuClientMock = vi.hoisted(() =>
   })),
 );
 
+const getUserAccessTokenMock = vi.hoisted(() =>
+  vi.fn(async (): Promise<string | null> => "user_test_token"),
+);
+
 vi.mock("./client.js", () => ({
   createFeishuClient: createFeishuClientMock,
+}));
+
+vi.mock("./user-auth.js", () => ({
+  getUserAccessToken: getUserAccessTokenMock,
 }));
 
 function createConfig(opts: { task?: boolean; hasAccount?: boolean }) {
@@ -84,8 +92,8 @@ describe("registerFeishuTaskTools", () => {
     expect(httpRequestMock.mock.calls[0]?.[0].data).toEqual({
       summary: "Full task",
       description: "desc",
-      due: { timestamp: "1675742789470" },
-      members: [{ id: "ou_1", role: "assignee" }],
+      due: { timestamp: "1675742789470", is_all_day: false },
+      members: [{ id: "ou_1", type: "user", role: "assignee" }],
     });
   });
 
@@ -121,7 +129,7 @@ describe("registerFeishuTaskTools", () => {
 
   // ---- list ----
 
-  it("lists tasks with pagination", async () => {
+  it("lists tasks with pagination (user token)", async () => {
     httpRequestMock.mockResolvedValueOnce({
       code: 0,
       data: {
@@ -140,8 +148,17 @@ describe("registerFeishuTaskTools", () => {
     expect(httpRequestMock.mock.calls[0]?.[0]).toMatchObject({
       method: "GET",
       url: "https://open.feishu.cn/open-apis/task/v2/tasks",
+      headers: expect.objectContaining({ Authorization: "Bearer user_test_token" }),
       params: expect.objectContaining({ page_size: "10" }),
     });
+  });
+
+  it("returns auth error when no user token available for list", async () => {
+    getUserAccessTokenMock.mockResolvedValueOnce(null);
+    const tool = registerTool();
+    const result = await tool.execute("tc_1", { action: "list" });
+    expect(result.details).toEqual(expect.objectContaining({ error: "NOT_AUTHORIZED" }));
+    expect(httpRequestMock).not.toHaveBeenCalled();
   });
 
   // ---- update ----
@@ -161,7 +178,7 @@ describe("registerFeishuTaskTools", () => {
     expect(httpRequestMock.mock.calls[0]?.[0]).toMatchObject({
       method: "PATCH",
       url: "https://open.feishu.cn/open-apis/task/v2/tasks/task_abc",
-      data: { summary: "Updated" },
+      data: { task: { summary: "Updated" }, update_fields: ["summary"] },
     });
   });
 
