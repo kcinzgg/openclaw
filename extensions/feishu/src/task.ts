@@ -4,7 +4,8 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { listEnabledFeishuAccounts } from "./accounts.js";
 import { createFeishuToolClient, resolveFeishuToolAccount } from "./tool-account.js";
 import { resolveToolsConfig } from "./tools-config.js";
-import { getUserAccessToken } from "./user-auth.js";
+import type { FeishuConfig } from "./types.js";
+import { buildToolAuthUrl, getUserAccessToken } from "./user-auth.js";
 
 // ============ Helpers ============
 
@@ -423,16 +424,36 @@ export function registerFeishuTaskTools(api: OpenClawPluginApi) {
               const userId = ctx.requesterSenderId?.trim() || "owner";
 
               const userToken = await getUserAccessToken(client, account.accountId, userId);
-              if (!userToken) {
+
+              const generateAuthResponse = (error: string, reason: string) => {
+                const feishuCfg = api.config?.channels?.feishu as FeishuConfig | undefined;
+                let authUrl: string | undefined;
+                if (account.appId) {
+                  authUrl = buildToolAuthUrl({
+                    appId: account.appId,
+                    accountId: account.accountId,
+                    userId,
+                    oauthCallbackUrl: feishuCfg?.oauthCallbackUrl,
+                    domain: typeof account.domain === "string" ? account.domain : undefined,
+                  });
+                }
                 return json({
-                  error: "NOT_AUTHORIZED",
+                  error,
                   message:
-                    "Feishu Task v2 list requires user OAuth authorization. " +
-                    "Tell the user to type the command: /feishu-auth " +
-                    "— this will generate an authorization link. " +
-                    "Do NOT fabricate or invent any URLs. " +
-                    "Alternative: use 'get' action with a known task_id.",
+                    reason +
+                    (authUrl
+                      ? ` Please click this link to authorize: ${authUrl} (expires in 10 minutes).`
+                      : " Tell the user to type /feishu-auth in the chat to authorize.") +
+                    " DO NOT fabricate any authorization URLs.",
+                  auth_url: authUrl,
                 });
+              };
+
+              if (!userToken) {
+                return generateAuthResponse(
+                  "NOT_AUTHORIZED",
+                  "Feishu Task v2 list requires user OAuth authorization.",
+                );
               }
               try {
                 return json(
@@ -447,14 +468,10 @@ export function registerFeishuTaskTools(api: OpenClawPluginApi) {
               } catch (listErr) {
                 const msg = listErr instanceof Error ? listErr.message : String(listErr);
                 if (msg.includes("99991663") || msg.includes("Invalid access token")) {
-                  return json({
-                    error: "TOKEN_EXPIRED",
-                    message:
-                      "User access token expired or invalid. " +
-                      "Tell the user to type the command: /feishu-auth " +
-                      "— this will generate a new authorization link. " +
-                      "Do NOT fabricate or invent any URLs.",
-                  });
+                  return generateAuthResponse(
+                    "TOKEN_EXPIRED",
+                    "User access token expired or invalid.",
+                  );
                 }
                 throw listErr;
               }

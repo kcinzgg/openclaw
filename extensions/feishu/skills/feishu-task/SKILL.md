@@ -47,7 +47,7 @@ Returns full task details including summary, description, due, members, status.
 
 ### List Tasks
 
-> **Requires OAuth**: The list action requires `user_access_token`. Run `/feishu-auth` to authorize first. If no user token is available, the tool returns a prompt to authorize.
+> **Requires OAuth**: The list action requires `user_access_token`. If no user token is available, the tool returns `auth_url` — present it as a clickable link. **The command name is `/feishu-auth` (with hyphen). NEVER write `/feishu auth` (with space).**
 
 ```json
 { "action": "list" }
@@ -127,9 +127,17 @@ Requires Feishu app permission: "查看、创建、编辑和删除飞书任务"
 
 ## User Authorization (OAuth)
 
-The `list` action requires `user_access_token`. If the tool returns `NOT_AUTHORIZED` or `TOKEN_EXPIRED`:
+The `list` action requires `user_access_token`.
 
-**IMPORTANT**: Tell the user to type the command `/feishu-auth` in the chat. This command will generate the real authorization link. Do NOT create, fabricate, or guess any authorization URLs yourself.
+When the user has not authorized (or the token has expired), the tool automatically returns:
+
+- An `error` field (`NOT_AUTHORIZED` or `TOKEN_EXPIRED`)
+- A `message` field with a ready-to-click authorization link
+- An `auth_url` field containing the raw URL
+
+**IMPORTANT**: When the tool returns `auth_url`, present it directly to the user as a clickable link. Do NOT modify, fabricate, or guess authorization URLs. Just forward the link from the tool response.
+
+If the tool cannot generate a link (missing appId), tell the user to type `/feishu-auth` in the chat.
 
 After authorization:
 

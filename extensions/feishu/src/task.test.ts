@@ -19,6 +19,9 @@ const getUserAccessTokenMock = vi.hoisted(() =>
       "user_test_token",
   ),
 );
+const buildToolAuthUrlMock = vi.hoisted(() =>
+  vi.fn(() => "https://open.feishu.cn/open-apis/authen/v1/authorize?mock"),
+);
 
 vi.mock("./client.js", () => ({
   createFeishuClient: createFeishuClientMock,
@@ -26,6 +29,7 @@ vi.mock("./client.js", () => ({
 
 vi.mock("./user-auth.js", () => ({
   getUserAccessToken: getUserAccessTokenMock,
+  buildToolAuthUrl: buildToolAuthUrlMock,
 }));
 
 function createConfig(opts: { task?: boolean; hasAccount?: boolean }) {
@@ -156,11 +160,15 @@ describe("registerFeishuTaskTools", () => {
     });
   });
 
-  it("returns auth error when no user token available for list", async () => {
+  it("returns auth error with auth_url when no user token available for list", async () => {
     getUserAccessTokenMock.mockResolvedValueOnce(null);
     const tool = registerTool();
     const result = await tool.execute("tc_1", { action: "list" });
     expect(result.details).toEqual(expect.objectContaining({ error: "NOT_AUTHORIZED" }));
+    expect(result.details.auth_url).toBe(
+      "https://open.feishu.cn/open-apis/authen/v1/authorize?mock",
+    );
+    expect(result.details.message).toContain("click this link");
     expect(httpRequestMock).not.toHaveBeenCalled();
   });
 

@@ -17,7 +17,11 @@ function tokenPath(accountId: string, userId: string): string {
 
 // Scopes required by user_access_token APIs used in OpenClaw Feishu tools.
 // Only request scopes that are actively used; add more as tools grow.
-const DEFAULT_OAUTH_SCOPES = ["task:task:read", "task:task:write"];
+// - task:task:read/write — feishu_task list/update actions
+// - offline_access — enables refresh_token for long-lived sessions
+// Note: im:message:readonly is NOT needed here because im/v1/messages list
+// only supports tenant_access_token (not user_access_token).
+const DEFAULT_OAUTH_SCOPES = ["task:task:read", "task:task:write", "offline_access"];
 
 export function buildAuthUrl(params: {
   appId: string;
@@ -142,33 +146,56 @@ export async function getUserAccessToken(
   accountId: string,
   userId: string,
 ): Promise<string | null> {
+  const exactPath = tokenPath(accountId, userId);
   let token = loadUserToken(accountId, userId);
 
-  // Fallback: if exact userId match not found, try any token for this account.
-  // Handles cases where the tool context userId differs from the OAuth userId
-  // (e.g., "owner" fallback vs actual open_id, or user_id vs open_id format).
+  console.error(
+    `[getUserAccessToken] accountId=${accountId} userId=${userId} exactPath=${exactPath} exactMatch=${!!token}`,
+  );
+
   let effectiveUserId = userId;
   if (!token) {
     const fallbackResult = findAnyTokenForAccount(accountId);
     if (fallbackResult) {
       token = fallbackResult.token;
       effectiveUserId = fallbackResult.userId;
+      console.error(
+        `[getUserAccessToken] exact miss → fallback hit: effectiveUserId=${effectiveUserId} openId=${token.openId}`,
+      );
+    } else {
+      console.error(`[getUserAccessToken] exact miss → fallback miss → returning null`);
     }
   }
   if (!token) return null;
 
-  if (Date.now() < token.expiresAt - TOKEN_EXPIRY_BUFFER_MS) {
+  const now = Date.now();
+  const expiresIn = token.expiresAt - now;
+  console.error(
+    `[getUserAccessToken] token found: openId=${token.openId} expiresIn=${Math.round(expiresIn / 1000)}s ` +
+      `needsRefresh=${now >= token.expiresAt - TOKEN_EXPIRY_BUFFER_MS} ` +
+      `accessToken=${token.accessToken.slice(0, 12)}...`,
+  );
+
+  if (now < token.expiresAt - TOKEN_EXPIRY_BUFFER_MS) {
     return token.accessToken;
   }
 
-  // Token expired or about to expire — try refresh
-  if (!token.refreshToken) return null;
+  if (!token.refreshToken) {
+    console.error(`[getUserAccessToken] token expired, no refreshToken → returning null`);
+    return null;
+  }
   try {
+    console.error(`[getUserAccessToken] refreshing token...`);
     token = await refreshUserToken(client, token.refreshToken);
     persistUserToken(accountId, effectiveUserId, token);
+    console.error(
+      `[getUserAccessToken] refresh OK: newExpiresIn=${Math.round((token.expiresAt - Date.now()) / 1000)}s`,
+    );
     return token.accessToken;
-  } catch {
-    // Refresh failed (refresh_token expired after ~30 days)
+  } catch (err) {
+    console.error(
+      `[getUserAccessToken] refresh FAILED: ${err instanceof Error ? err.message : err} → deleting token`,
+    );
     deleteUserToken(accountId, effectiveUserId);
     return null;
   }
@@ -203,6 +230,29 @@ function findAnyTokenForAccount(
     // ignore scan errors
   }
   return null;
+}
+
+// ── Inline auth URL generation for tools ──
+// When a tool detects the user has no valid token, it can call this to generate
+// an auth URL directly in the tool response, so the user can click it immediately
+// instead of having to manually type /feishu-auth.
+
+export function buildToolAuthUrl(params: {
+  appId: string;
+  accountId: string;
+  userId: string;
+  oauthCallbackUrl?: string;
+  domain?: string;
+}): string {
+  const callbackUrl =
+    params.oauthCallbackUrl ?? "http://localhost:18789/plugins/feishu/oauth/callback";
+  const state = createPendingAuth(params.accountId, params.userId);
+  return buildAuthUrl({
+    appId: params.appId,
+    redirectUri: callbackUrl,
+    state,
+    domain: params.domain,
+  });
 }
 
 // ── Pending auth state (persisted to disk so it survives gateway restarts) ──

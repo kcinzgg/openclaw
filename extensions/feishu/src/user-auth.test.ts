@@ -18,7 +18,7 @@ import {
 // ── buildAuthUrl ──
 
 describe("buildAuthUrl", () => {
-  it("generates feishu auth URL by default", () => {
+  it("generates feishu-auth URL by default", () => {
     const url = buildAuthUrl({
       appId: "cli_abc",
       redirectUri: "http://localhost:18789/callback",
