@@ -26,8 +26,8 @@ Optional parameters:
 
 - `container_id_type`: `"chat"` (default) or `"thread"`. Normally leave as default — threads are auto-expanded.
 - `thread_id`: Thread ID, e.g. `"omt_xxx"`. Only needed when `container_id_type` is `"thread"` (manual thread-only query).
-- `start_time`: **Prefer passing date strings** like `"2026-03-01"` instead of computing timestamps. The tool automatically converts dates to epoch seconds using CST (UTC+8). Supported formats: date string (`"2026-03-01"`), ISO datetime (`"2026-03-01T09:00:00+08:00"`), or raw Unix epoch seconds (`"1772294400"`). A bare date resolves to **start of day** (00:00:00 CST). Only works with `container_id_type="chat"`.
-- `end_time`: Same formats as `start_time`. A bare date resolves to **end of day** (23:59:59 CST). For "all of March 1", just pass `start_time="2026-03-01"` and `end_time="2026-03-01"`. Only works with `container_id_type="chat"`. **DO NOT manually compute timestamps — let the tool handle it.**
+- `start_time`: **MUST pass a date string** like `"2026-03-01"` or ISO 8601 like `"2026-03-01T09:00:00+08:00"`. **NEVER compute or pass Unix timestamps** — the tool converts dates to epoch seconds automatically using Asia/Shanghai (CST, UTC+8). A bare date `"2026-03-01"` resolves to **start of day** (00:00:00 CST). Only works with `container_id_type="chat"`.
+- `end_time`: **MUST pass a date string** (same format as `start_time`). A bare date resolves to **end of day** (23:59:59 CST). For "all of March 1", pass `start_time="2026-03-01"` and `end_time="2026-03-01"`. **NEVER pass numeric timestamps.** Only works with `container_id_type="chat"`.
 - `sort_type`: `"ByCreateTimeAsc"` or `"ByCreateTimeDesc"` (default: desc)
 - `page_size`: 1-50 (default: 20)
 - `page_token`: For pagination

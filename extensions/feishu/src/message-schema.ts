@@ -37,21 +37,21 @@ export const FeishuMessageSchema = Type.Object({
   start_time: Type.Optional(
     Type.String({
       description:
-        'Start time. Accepts date string (e.g. "2026-03-01", "2026-03-01T09:00:00+08:00") ' +
-        'or Unix epoch seconds (e.g. "1772294400"). Dates without timezone are treated as Asia/Shanghai (CST, UTC+8). ' +
-        'A date like "2026-03-01" becomes the start of that day (00:00:00 CST). ' +
-        'For list with container_id_type="chat" only. Thread type does NOT support time range. ' +
-        "IMPORTANT: Prefer passing date strings instead of computing timestamps yourself.",
+        'Start time as a DATE STRING. MUST use format YYYY-MM-DD (e.g. "2026-03-01") ' +
+        'or ISO 8601 with timezone (e.g. "2026-03-01T09:00:00+08:00"). ' +
+        "DO NOT compute Unix timestamps — the tool converts dates automatically. " +
+        "Bare date resolves to start of day 00:00:00 in Asia/Shanghai (CST, UTC+8). " +
+        'For list with container_id_type="chat" only. Thread type does NOT support time range.',
     }),
   ),
   end_time: Type.Optional(
     Type.String({
       description:
-        'End time. Accepts date string (e.g. "2026-03-01", "2026-03-01T23:59:59+08:00") ' +
-        'or Unix epoch seconds (e.g. "1772380799"). Dates without timezone are treated as Asia/Shanghai (CST, UTC+8). ' +
-        'A date like "2026-03-01" becomes the end of that day (23:59:59 CST). ' +
-        'For list with container_id_type="chat" only. Thread type does NOT support time range. ' +
-        "IMPORTANT: Prefer passing date strings instead of computing timestamps yourself.",
+        'End time as a DATE STRING. MUST use format YYYY-MM-DD (e.g. "2026-03-01") ' +
+        'or ISO 8601 with timezone (e.g. "2026-03-01T23:59:59+08:00"). ' +
+        "DO NOT compute Unix timestamps — the tool converts dates automatically. " +
+        "Bare date resolves to end of day 23:59:59 in Asia/Shanghai (CST, UTC+8). " +
+        'For list with container_id_type="chat" only. Thread type does NOT support time range.',
     }),
   ),
   sort_type: Type.Optional(

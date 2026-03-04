@@ -14,27 +14,37 @@ function json(data: unknown) {
 
 const CST_OFFSET_MS = 8 * 60 * 60 * 1000;
 
+function dateToEpoch(y: number, m: number, d: number, mode: "start" | "end"): string {
+  const utcMs =
+    mode === "start"
+      ? Date.UTC(y, m - 1, d, 0, 0, 0) - CST_OFFSET_MS
+      : Date.UTC(y, m - 1, d, 23, 59, 59) - CST_OFFSET_MS;
+  return String(Math.floor(utcMs / 1000));
+}
+
 /**
- * Parse a time value that can be either:
- * - Unix epoch seconds (all digits, e.g. "1772294400")
- * - Date string (e.g. "2026-03-01", "2026-03-01T09:00:00+08:00")
+ * Parse a time parameter into Unix epoch seconds.
+ * Accepts: date string ("2026-03-01"), ISO datetime ("2026-03-01T09:00:00+08:00"),
+ * or raw epoch seconds (digits only — logged as warning and kept for back-compat).
  *
- * For date-only strings without timezone, treats as Asia/Shanghai (UTC+8).
+ * Bare dates without timezone are treated as Asia/Shanghai (UTC+8).
  * `mode` controls whether a bare date resolves to start-of-day or end-of-day.
  */
 function parseTimeParam(value: string, mode: "start" | "end"): string {
-  if (/^\d{9,11}$/.test(value)) return value;
+  // Raw epoch digits: log a warning (LLM should pass date strings) but accept
+  if (/^\d{9,11}$/.test(value)) {
+    const d = new Date(Number(value) * 1000 + CST_OFFSET_MS);
+    console.error(
+      `[parseTimeParam] WARN: raw epoch ${value} received (resolves to ${d.toISOString().slice(0, 10)} CST). ` +
+        "LLM should pass date strings like '2026-03-01' instead.",
+    );
+    return value;
+  }
 
   // Date-only: "2026-03-01" or "2026-3-1"
-  const dateOnly = /^\d{4}-\d{1,2}-\d{1,2}$/.test(value);
-  if (dateOnly) {
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(value)) {
     const [y, m, d] = value.split("-").map(Number);
-    // Build date in UTC, then shift by CST offset
-    const utcMs =
-      mode === "start"
-        ? Date.UTC(y, m - 1, d, 0, 0, 0) - CST_OFFSET_MS
-        : Date.UTC(y, m - 1, d, 23, 59, 59) - CST_OFFSET_MS;
-    return String(Math.floor(utcMs / 1000));
+    return dateToEpoch(y, m, d, mode);
   }
 
   // ISO string with or without timezone
