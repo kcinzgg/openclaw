@@ -391,6 +391,9 @@ export function registerFeishuTaskTools(api: OpenClawPluginApi) {
       async execute(_toolCallId, rawParams) {
         const params = rawParams as FeishuTaskParams;
         try {
+          api.logger.info(
+            `feishu_task: action=${params.action} requesterSenderId=${ctx.requesterSenderId ?? "(empty)"} messageChannel=${ctx.messageChannel ?? "(empty)"}`,
+          );
           const client = createFeishuToolClient({
             api,
             executeParams: { accountId: params.accountId },
@@ -415,7 +418,11 @@ export function registerFeishuTaskTools(api: OpenClawPluginApi) {
                 executeParams: { accountId: params.accountId },
                 defaultAccountId: ctx.agentAccountId,
               });
-              const userToken = await getUserAccessToken(client, account.accountId);
+
+              // Use sender ID when available (group chat); fall back to "owner" for local/web sessions
+              const userId = ctx.requesterSenderId?.trim() || "owner";
+
+              const userToken = await getUserAccessToken(client, account.accountId, userId);
               if (!userToken) {
                 return json({
                   error: "NOT_AUTHORIZED",
@@ -456,13 +463,18 @@ export function registerFeishuTaskTools(api: OpenClawPluginApi) {
               if (!params.task_id) {
                 return json({ error: "task_id is required for update action" });
               }
+
               const updateAccount = resolveFeishuToolAccount({
                 api,
                 executeParams: { accountId: params.accountId },
                 defaultAccountId: ctx.agentAccountId,
               });
+
+              const updateUserId = ctx.requesterSenderId?.trim() || "owner";
+
               const updateToken =
-                (await getUserAccessToken(client, updateAccount.accountId)) ?? undefined;
+                (await getUserAccessToken(client, updateAccount.accountId, updateUserId)) ??
+                undefined;
               return json(
                 await updateTask(client, params.task_id, params, { userToken: updateToken }),
               );

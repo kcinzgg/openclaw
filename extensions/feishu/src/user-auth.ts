@@ -7,9 +7,10 @@ import type { FeishuUserToken } from "./types.js";
 
 const TOKEN_DIR = path.join(os.homedir(), ".openclaw", "credentials");
 
-function tokenPath(accountId: string): string {
-  const safe = accountId.replace(/[^a-zA-Z0-9_-]/g, "_");
-  return path.join(TOKEN_DIR, `feishu-user-token-${safe}.json`);
+function tokenPath(accountId: string, userId: string): string {
+  const safeAccount = accountId.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const safeUser = userId.replace(/[^a-zA-Z0-9_-]/g, "_");
+  return path.join(TOKEN_DIR, `feishu-user-token-${safeAccount}-${safeUser}.json`);
 }
 
 // ── Auth URL ──
@@ -102,15 +103,15 @@ export async function refreshUserToken(
 
 // ── Persistence ──
 
-export function persistUserToken(accountId: string, token: FeishuUserToken): void {
+export function persistUserToken(accountId: string, userId: string, token: FeishuUserToken): void {
   fs.mkdirSync(TOKEN_DIR, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(tokenPath(accountId), JSON.stringify(token, null, 2), {
+  fs.writeFileSync(tokenPath(accountId, userId), JSON.stringify(token, null, 2), {
     mode: 0o600,
   });
 }
 
-export function loadUserToken(accountId: string): FeishuUserToken | null {
-  const p = tokenPath(accountId);
+export function loadUserToken(accountId: string, userId: string): FeishuUserToken | null {
+  const p = tokenPath(accountId, userId);
   if (!fs.existsSync(p)) return null;
   try {
     const raw = JSON.parse(fs.readFileSync(p, "utf-8")) as Record<string, unknown>;
@@ -123,8 +124,8 @@ export function loadUserToken(accountId: string): FeishuUserToken | null {
   }
 }
 
-export function deleteUserToken(accountId: string): void {
-  const p = tokenPath(accountId);
+export function deleteUserToken(accountId: string, userId: string): void {
+  const p = tokenPath(accountId, userId);
   try {
     fs.unlinkSync(p);
   } catch {
@@ -139,8 +140,21 @@ const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000; // refresh 5 min before expiry
 export async function getUserAccessToken(
   client: Lark.Client,
   accountId: string,
+  userId: string,
 ): Promise<string | null> {
-  let token = loadUserToken(accountId);
+  let token = loadUserToken(accountId, userId);
+
+  // Fallback: if exact userId match not found, try any token for this account.
+  // Handles cases where the tool context userId differs from the OAuth userId
+  // (e.g., "owner" fallback vs actual open_id, or user_id vs open_id format).
+  let effectiveUserId = userId;
+  if (!token) {
+    const fallbackResult = findAnyTokenForAccount(accountId);
+    if (fallbackResult) {
+      token = fallbackResult.token;
+      effectiveUserId = fallbackResult.userId;
+    }
+  }
   if (!token) return null;
 
   if (Date.now() < token.expiresAt - TOKEN_EXPIRY_BUFFER_MS) {
@@ -151,18 +165,49 @@ export async function getUserAccessToken(
   if (!token.refreshToken) return null;
   try {
     token = await refreshUserToken(client, token.refreshToken);
-    persistUserToken(accountId, token);
+    persistUserToken(accountId, effectiveUserId, token);
     return token.accessToken;
   } catch {
     // Refresh failed (refresh_token expired after ~30 days)
-    deleteUserToken(accountId);
+    deleteUserToken(accountId, effectiveUserId);
     return null;
   }
 }
 
+/** Scan credentials dir for any valid token file matching this account. */
+function findAnyTokenForAccount(
+  accountId: string,
+): { token: FeishuUserToken; userId: string } | null {
+  const safeAccountId = accountId.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const prefix = `feishu-user-token-${safeAccountId}-`;
+  try {
+    if (!fs.existsSync(TOKEN_DIR)) return null;
+    const files = fs.readdirSync(TOKEN_DIR);
+    for (const file of files) {
+      if (!file.startsWith(prefix) || !file.endsWith(".json")) continue;
+      const foundUserId = file.slice(prefix.length, -5);
+      if (!foundUserId) continue;
+      try {
+        const raw = JSON.parse(fs.readFileSync(path.join(TOKEN_DIR, file), "utf-8")) as Record<
+          string,
+          unknown
+        >;
+        if (typeof raw.accessToken === "string" && typeof raw.refreshToken === "string") {
+          return { token: raw as unknown as FeishuUserToken, userId: foundUserId };
+        }
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    // ignore scan errors
+  }
+  return null;
+}
+
 // ── Pending auth state (persisted to disk so it survives gateway restarts) ──
 
-type PendingAuthEntry = { accountId: string; createdAt: number };
+type PendingAuthEntry = { accountId: string; userId: string; createdAt: number };
 const PENDING_AUTH_TTL_MS = 10 * 60 * 1000;
 const PENDING_AUTH_FILE = path.join(TOKEN_DIR, "feishu-pending-oauth.json");
 
@@ -186,7 +231,7 @@ function savePendingAuths(map: Map<string, PendingAuthEntry>): void {
   });
 }
 
-export function createPendingAuth(accountId: string): string {
+export function createPendingAuth(accountId: string, userId: string): string {
   const pending = loadPendingAuths();
   const now = Date.now();
   // Clean stale entries
@@ -194,17 +239,17 @@ export function createPendingAuth(accountId: string): string {
     if (now - val.createdAt > PENDING_AUTH_TTL_MS) pending.delete(key);
   }
   const state = crypto.randomBytes(16).toString("hex");
-  pending.set(state, { accountId, createdAt: now });
+  pending.set(state, { accountId, userId, createdAt: now });
   savePendingAuths(pending);
   return state;
 }
 
-export function consumePendingAuth(state: string): string | null {
+export function consumePendingAuth(state: string): { accountId: string; userId: string } | null {
   const pending = loadPendingAuths();
   const entry = pending.get(state);
   if (!entry) return null;
   pending.delete(state);
   savePendingAuths(pending);
   if (Date.now() - entry.createdAt > PENDING_AUTH_TTL_MS) return null;
-  return entry.accountId;
+  return { accountId: entry.accountId, userId: entry.userId };
 }

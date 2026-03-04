@@ -1,4 +1,7 @@
+import * as fs from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import * as os from "node:os";
+import * as path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { listEnabledFeishuAccounts, resolveFeishuAccount } from "./accounts.js";
 import { createFeishuClient } from "./client.js";
@@ -35,8 +38,8 @@ export function registerFeishuOAuth(api: OpenClawPluginApi): void {
         return;
       }
 
-      const accountId = consumePendingAuth(state);
-      if (!accountId) {
+      const authData = consumePendingAuth(state);
+      if (!authData) {
         res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
         res.end(
           "<h1>Invalid or expired authorization state</h1>" +
@@ -49,21 +52,24 @@ export function registerFeishuOAuth(api: OpenClawPluginApi): void {
         return;
       }
 
+      const { accountId, userId } = authData;
+
       try {
         const account = resolveFeishuAccount({ cfg: api.config, accountId });
         const client = createFeishuClient(account);
         const token = await exchangeCodeForToken(client, code);
-        persistUserToken(accountId, token);
+        persistUserToken(accountId, userId, token);
 
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(
           `<h1>Feishu OAuth Authorized</h1>` +
             `<p>Account: <b>${accountId}</b></p>` +
-            `<p>User: <b>${token.openId}</b></p>` +
+            `<p>User: <b>${userId}</b></p>` +
+            `<p>OpenID: <b>${token.openId}</b></p>` +
             `<p>You can close this window and return to OpenClaw.</p>`,
         );
         api.logger.info(
-          `Feishu OAuth: user token obtained for account "${accountId}" (openId=${token.openId})`,
+          `Feishu OAuth: user token obtained for account "${accountId}" user "${userId}" (openId=${token.openId})`,
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -87,18 +93,21 @@ export function registerFeishuOAuth(api: OpenClawPluginApi): void {
       }
 
       const accountId = ctx.accountId ?? "default";
+      // Use sender ID from Feishu message context; fall back to "owner" for local/web sessions
+      const userId = ctx.senderId?.trim() || "owner";
+
       const account = resolveFeishuAccount({ cfg: api.config, accountId });
       if (!account.appId) {
         return { text: `Feishu account "${accountId}" has no appId configured.` };
       }
 
-      // Check existing token
-      const existing = loadUserToken(accountId);
+      // Check existing token for this user
+      const existing = loadUserToken(accountId, userId);
       if (existing && existing.expiresAt > Date.now()) {
         if (ctx.args?.trim() !== "force") {
           return {
             text:
-              `User token for account "${accountId}" is still valid (openId=${existing.openId}).\n` +
+              `Your user token is still valid (openId=${existing.openId}).\n` +
               `Run \`/feishu-auth force\` to re-authorize.`,
           };
         }
@@ -107,7 +116,7 @@ export function registerFeishuOAuth(api: OpenClawPluginApi): void {
       const callbackUrl =
         feishuCfg.oauthCallbackUrl ?? `http://localhost:18789/plugins/feishu/oauth/callback`;
 
-      const state = createPendingAuth(accountId);
+      const state = createPendingAuth(accountId, userId);
       const authUrl = buildAuthUrl({
         appId: account.appId,
         redirectUri: callbackUrl,
@@ -126,18 +135,52 @@ export function registerFeishuOAuth(api: OpenClawPluginApi): void {
 
 /**
  * Log user token status for each enabled account on startup.
- * Tokens are loaded from disk on demand (no SDK cache to warm up).
+ * Scans for all user token files matching the account pattern.
  */
 export function logUserTokenStatus(api: OpenClawPluginApi): void {
   if (!api.config) return;
   const accounts = listEnabledFeishuAccounts(api.config);
+
   for (const account of accounts) {
-    const token = loadUserToken(account.accountId);
-    if (token) {
-      const valid = token.expiresAt > Date.now();
-      api.logger.info(
-        `Feishu OAuth: account "${account.accountId}" has persisted user token ` +
-          `(openId=${token.openId}, ${valid ? "valid" : "expired"})`,
+    const tokenDir = path.join(os.homedir(), ".openclaw", "credentials");
+    if (!fs.existsSync(tokenDir)) continue;
+
+    const safeAccountId = account.accountId.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const prefix = `feishu-user-token-${safeAccountId}-`;
+
+    try {
+      const files = fs.readdirSync(tokenDir);
+      const tokenFiles = files.filter((f) => f.startsWith(prefix) && f.endsWith(".json"));
+
+      if (tokenFiles.length === 0) {
+        api.logger.debug?.(
+          `Feishu OAuth: account "${account.accountId}" has no persisted user tokens`,
+        );
+        continue;
+      }
+
+      for (const file of tokenFiles) {
+        const userId = file.slice(prefix.length, -5); // Remove prefix and .json
+        try {
+          const raw = JSON.parse(fs.readFileSync(path.join(tokenDir, file), "utf-8")) as Record<
+            string,
+            unknown
+          >;
+          const expiresAt = raw.expiresAt as number | undefined;
+          const openId = raw.openId as string | undefined;
+          const valid = expiresAt ? expiresAt > Date.now() : false;
+
+          api.logger.info(
+            `Feishu OAuth: account "${account.accountId}" user "${userId}" has persisted user token ` +
+              `(openId=${openId ?? "unknown"}, ${valid ? "valid" : "expired"})`,
+          );
+        } catch (err) {
+          api.logger.warn?.(`Feishu OAuth: failed to read token file ${file}: ${err}`);
+        }
+      }
+    } catch (err) {
+      api.logger.warn?.(
+        `Feishu OAuth: failed to scan token directory for account "${account.accountId}": ${err}`,
       );
     }
   }

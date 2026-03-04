@@ -143,7 +143,7 @@ describe("token persistence", () => {
   // But os.homedir() caches the result, so we test via direct file ops
 
   it("returns null for non-existent token", () => {
-    expect(loadUserToken("nonexistent_account_xyz_" + Date.now())).toBeNull();
+    expect(loadUserToken("nonexistent_account_xyz_" + Date.now(), "ou_user123")).toBeNull();
   });
 });
 
@@ -151,12 +151,12 @@ describe("token persistence", () => {
 
 describe("pending auth state", () => {
   it("creates and consumes a pending auth", () => {
-    const state = createPendingAuth("account1");
+    const state = createPendingAuth("account1", "ou_user123");
     expect(typeof state).toBe("string");
     expect(state.length).toBe(32);
 
-    const accountId = consumePendingAuth(state);
-    expect(accountId).toBe("account1");
+    const authData = consumePendingAuth(state);
+    expect(authData).toEqual({ accountId: "account1", userId: "ou_user123" });
 
     // Second consumption should return null
     expect(consumePendingAuth(state)).toBeNull();
@@ -172,7 +172,11 @@ describe("pending auth state", () => {
 describe("getUserAccessToken", () => {
   it("returns null when no token file exists", async () => {
     const mockClient = {} as never;
-    const result = await getUserAccessToken(mockClient, "no_such_account_" + Date.now());
+    const result = await getUserAccessToken(
+      mockClient,
+      "no_such_account_" + Date.now(),
+      "ou_user123",
+    );
     expect(result).toBeNull();
   });
 });

@@ -136,6 +136,17 @@ After authorization:
 - Token is persisted and auto-refreshed (valid ~30 days)
 - Re-run `/feishu-auth force` to re-authorize if the refresh token expires
 
+## Multi-user Support
+
+Each user in a Feishu group must authorize independently:
+
+- User A runs `/feishu-auth` → authorizes with their Feishu account
+- User B runs `/feishu-auth` → authorizes with their Feishu account
+- When User A asks the bot to list tasks, the bot uses A's token (sees only A's tasks)
+- When User B asks the bot to list tasks, the bot uses B's token (sees only B's tasks)
+
+Tokens are stored per user and automatically refreshed for ~30 days.
+
 ## Configuration
 
 Enable in `channels.feishu.tools`:

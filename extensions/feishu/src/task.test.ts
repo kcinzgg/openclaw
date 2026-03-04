@@ -14,7 +14,10 @@ const createFeishuClientMock = vi.hoisted(() =>
 );
 
 const getUserAccessTokenMock = vi.hoisted(() =>
-  vi.fn(async (): Promise<string | null> => "user_test_token"),
+  vi.fn(
+    async (_client: unknown, _accountId: string, _userId: string): Promise<string | null> =>
+      "user_test_token",
+  ),
 );
 
 vi.mock("./client.js", () => ({
@@ -53,7 +56,7 @@ function registerTool() {
   } as never);
   expect(fn).toHaveBeenCalledTimes(1);
   const factory = fn.mock.calls[0]?.[0];
-  return factory({ agentAccountId: undefined });
+  return factory({ agentAccountId: undefined, requesterSenderId: "ou_test_user" });
 }
 
 describe("registerFeishuTaskTools", () => {
