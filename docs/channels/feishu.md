@@ -538,9 +538,9 @@ Set `streaming: false` to wait for the full reply before sending.
 
 The Feishu plugin can expose extra tools to the agent (doc, chat, wiki, drive, bitable, task). They are controlled per account via `channels.feishu.accounts.<id>.tools` or the top-level `channels.feishu.tools`. By default, doc, chat, wiki, drive and scopes are enabled; perm and task are disabled.
 
-| Tool          | Config key   | Description                        |
-| ------------- | ------------ | ---------------------------------- |
-| `feishu_task` | `tools.task` | Create Feishu tasks (Task Center). |
+| Tool          | Config key   | Description                                 |
+| ------------- | ------------ | ------------------------------------------- |
+| `feishu_task` | `tools.task` | Create Feishu tasks (Task v2, Task Center). |
 
 To enable task creation:
 
@@ -563,7 +563,7 @@ To enable task creation:
 }
 ```
 
-The agent can then use the `feishu_task` tool with `action: "create"` and a `summary` (and optional `description`, `due`) to create tasks.
+The agent can then use the `feishu_task` tool with `action: "create"` and a `summary`. Optional fields: `description`, `due` (Unix timestamp in milliseconds as string, e.g. `"1675742789470"`), `members` (array of `{ id, role }` with `role` one of `assignee` or `follower`), and `user_id_type` (default `open_id`).
 
 ### Multi-agent routing
 

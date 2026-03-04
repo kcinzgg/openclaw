@@ -60,8 +60,31 @@ describe("registerFeishuTaskTools", () => {
     expect(requestMock).toHaveBeenCalledTimes(1);
     expect(requestMock.mock.calls[0]?.[0]).toMatchObject({
       method: "POST",
-      url: "/open-apis/task/v1/tasks",
+      url: "/open-apis/task/v2/tasks",
       data: { summary: "My new task" },
+    });
+  });
+
+  it("sends due as timestamp object and members when provided", async () => {
+    const registerTool = vi.fn();
+    registerFeishuTaskTools({
+      config: createConfig({ task: true }) as never,
+      logger: { debug: vi.fn(), info: vi.fn() } as never,
+      registerTool,
+    } as never);
+    const factory = registerTool.mock.calls[0]?.[0];
+    const tool = factory({ agentAccountId: undefined });
+    await tool.execute("tc_1", {
+      action: "create",
+      summary: "Task with due and members",
+      due: "1675742789470",
+      members: [{ id: "ou_1", role: "assignee" }],
+    });
+    expect(requestMock).toHaveBeenCalledTimes(1);
+    expect(requestMock.mock.calls[0]?.[0].data).toEqual({
+      summary: "Task with due and members",
+      due: { timestamp: "1675742789470" },
+      members: [{ id: "ou_1", role: "assignee" }],
     });
   });
 

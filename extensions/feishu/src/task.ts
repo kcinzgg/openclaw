@@ -22,6 +22,7 @@ type LarkTaskResponse = {
 
 const TASK_ACTION_VALUES = ["create"] as const;
 const USER_ID_TYPE_VALUES = ["open_id", "user_id", "union_id"] as const;
+const MEMBER_ROLE_VALUES = ["assignee", "follower"] as const;
 
 export const FeishuTaskSchema = Type.Object({
   action: Type.Unsafe<(typeof TASK_ACTION_VALUES)[number]>({
@@ -44,8 +45,16 @@ export const FeishuTaskSchema = Type.Object({
   members: Type.Optional(
     Type.Array(
       Type.Object({
-        id: Type.String({ description: "User ID" }),
-        role: Type.Optional(Type.String({ description: "Role: assignee or follower" })),
+        id: Type.String({
+          description: "User ID (open_id, user_id, or union_id per user_id_type)",
+        }),
+        role: Type.Optional(
+          Type.Unsafe<(typeof MEMBER_ROLE_VALUES)[number]>({
+            type: "string",
+            enum: [...MEMBER_ROLE_VALUES],
+            description: "Role: assignee or follower",
+          }),
+        ),
       }),
       { description: "Task members (assignees/followers)" },
     ),
