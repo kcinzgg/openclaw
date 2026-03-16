@@ -25,12 +25,14 @@ Returns: title, plain text content, block statistics. Check `hint` field - if pr
 ### Write Document (Replace All)
 
 ```json
-{ "action": "write", "doc_token": "ABC123def", "content": "# Title\n\nMarkdown content..." }
+{ "action": "write", "doc_token": "ABC123def", "content": "## Section 1\n\nContent here..." }
 ```
 
 Replaces entire document with markdown content. Supports: headings, lists, code blocks, quotes, links, images (`![](url)` auto-uploaded), bold/italic/strikethrough.
 
 **Limitation:** Markdown tables are NOT supported.
+
+**Content rules:** Same as `create_with_content` — do NOT include the document title as a heading, do NOT include conversational text. Only the document body.
 
 ### Append Content
 
@@ -58,6 +60,26 @@ With folder:
 ```
 
 **Important:** Always pass `owner_open_id` with the requesting user's `open_id` (from inbound metadata `sender_id`) so the user automatically gets `full_access` permission on the created document. Without this, only the bot app has access.
+
+### Create Document with Content (Recommended)
+
+```json
+{
+  "action": "create_with_content",
+  "title": "Report Title",
+  "content": "## Overview\n\nThis report covers...\n\n## Key Findings\n\n...",
+  "folder_token": "fldcnXXX"
+}
+```
+
+Creates a new document and writes content in a single step. This is the **recommended** way to create documents with content -- it avoids the two-step create-then-write pattern that weaker models may fail to complete.
+
+**CRITICAL content rules:**
+
+- `title` sets the document title. **NEVER repeat the title as a heading in `content`.**
+- `content` must contain **only the document body** in markdown format.
+- **NEVER include** conversational text, greetings, preamble, or commentary (e.g. "陛下，以下是..." or "Here is the report you requested...") in `content`. These belong in your chat reply, not in the document.
+- Start `content` directly with the first section heading (e.g. `## Overview`) or the first paragraph of body text.
 
 ### List Blocks
 
@@ -194,6 +216,12 @@ Rules:
 1. Start with `action: "read"` - get plain text + statistics
 2. Check `block_types` in response for Table, Image, Code, etc.
 3. If structured content exists, use `action: "list_blocks"` for full data
+
+## Creating Documents
+
+- **Simple:** Use `create_with_content` for one-step creation with content
+- **Complex / large content with tables:** Use `feishu_drive` upload + import workflow (upload .md file, then import as docx)
+- **Empty:** Use `create` then write later
 
 ## Configuration
 

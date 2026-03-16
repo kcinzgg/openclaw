@@ -23,7 +23,10 @@ export const FeishuDocSchema = Type.Union([
     action: Type.Literal("write"),
     doc_token: Type.String({ description: "Document token" }),
     content: Type.String({
-      description: "Markdown content to write (replaces entire document content)",
+      description:
+        "Markdown content to write (replaces entire document content). " +
+        "DO NOT include the document title as a heading — the title is already set on the document. " +
+        "DO NOT include conversational text or commentary — only the document content itself.",
     }),
   }),
   Type.Object({
@@ -42,6 +45,23 @@ export const FeishuDocSchema = Type.Union([
   Type.Object({
     action: Type.Literal("create"),
     title: Type.String({ description: "Document title" }),
+    folder_token: Type.Optional(Type.String({ description: "Target folder token (optional)" })),
+    grant_to_requester: Type.Optional(
+      Type.Boolean({
+        description:
+          "Grant edit permission to the trusted requesting Feishu user from runtime context (default: true).",
+      }),
+    ),
+  }),
+  Type.Object({
+    action: Type.Literal("create_with_content"),
+    title: Type.String({ description: "Document title" }),
+    content: Type.String({
+      description:
+        "Markdown content for the document BODY only. " +
+        "DO NOT include the title (it is set via the title field). " +
+        "DO NOT include conversational text, greetings, or commentary — only the document content itself.",
+    }),
     folder_token: Type.Optional(Type.String({ description: "Target folder token (optional)" })),
     grant_to_requester: Type.Optional(
       Type.Boolean({

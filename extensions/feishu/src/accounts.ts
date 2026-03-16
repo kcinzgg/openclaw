@@ -1,5 +1,5 @@
+import type { ClawdbotConfig } from "openclaw/plugin-sdk";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "openclaw/plugin-sdk/account-id";
-import type { ClawdbotConfig } from "openclaw/plugin-sdk/feishu";
 import { normalizeResolvedSecretInputString, normalizeSecretInputString } from "./secret-input.js";
 import type {
   FeishuConfig,
@@ -129,58 +129,27 @@ export function resolveFeishuCredentials(
   verificationToken?: string;
   domain: FeishuDomain;
 } | null {
-  const normalizeString = (value: unknown): string | undefined => {
-    if (typeof value !== "string") {
-      return undefined;
-    }
-    const trimmed = value.trim();
-    return trimmed ? trimmed : undefined;
-  };
-
-  const resolveSecretLike = (value: unknown, path: string): string | undefined => {
-    const asString = normalizeString(value);
-    if (asString) {
-      return asString;
-    }
-
-    // In relaxed/setup paths only: allow direct env SecretRef reads for UX.
-    // Default resolution path must preserve unresolved-ref diagnostics/policy semantics.
-    if (options?.allowUnresolvedSecretRef && typeof value === "object" && value !== null) {
-      const rec = value as Record<string, unknown>;
-      const source = normalizeString(rec.source)?.toLowerCase();
-      const id = normalizeString(rec.id);
-      if (source === "env" && id) {
-        const envValue = normalizeString(process.env[id]);
-        if (envValue) {
-          return envValue;
-        }
-      }
-    }
-
-    if (options?.allowUnresolvedSecretRef) {
-      return normalizeSecretInputString(value);
-    }
-    return normalizeResolvedSecretInputString({ value, path });
-  };
-
-  const appId = resolveSecretLike(cfg?.appId, "channels.feishu.appId");
-  const appSecret = resolveSecretLike(cfg?.appSecret, "channels.feishu.appSecret");
-
+  const appId = cfg?.appId?.trim();
+  const appSecret = options?.allowUnresolvedSecretRef
+    ? normalizeSecretInputString(cfg?.appSecret)
+    : normalizeResolvedSecretInputString({
+        value: cfg?.appSecret,
+        path: "channels.feishu.appSecret",
+      });
   if (!appId || !appSecret) {
     return null;
   }
-  const connectionMode = cfg?.connectionMode ?? "websocket";
   return {
     appId,
     appSecret,
-    encryptKey:
-      connectionMode === "webhook"
-        ? resolveSecretLike(cfg?.encryptKey, "channels.feishu.encryptKey")
-        : normalizeString(cfg?.encryptKey),
-    verificationToken: resolveSecretLike(
-      cfg?.verificationToken,
-      "channels.feishu.verificationToken",
-    ),
+    encryptKey: cfg?.encryptKey?.trim() || undefined,
+    verificationToken:
+      (options?.allowUnresolvedSecretRef
+        ? normalizeSecretInputString(cfg?.verificationToken)
+        : normalizeResolvedSecretInputString({
+            value: cfg?.verificationToken,
+            path: "channels.feishu.verificationToken",
+          })) || undefined,
     domain: cfg?.domain ?? "feishu",
   };
 }
@@ -217,14 +186,13 @@ export function resolveFeishuAccount(params: {
 
   // Resolve credentials from merged config
   const creds = resolveFeishuCredentials(merged);
-  const accountName = (merged as FeishuAccountConfig).name;
 
   return {
     accountId,
     selectionSource,
     enabled,
     configured: Boolean(creds),
-    name: typeof accountName === "string" ? accountName.trim() || undefined : undefined,
+    name: (merged as FeishuAccountConfig).name?.trim() || undefined,
     appId: creds?.appId,
     appSecret: creds?.appSecret,
     encryptKey: creds?.encryptKey,

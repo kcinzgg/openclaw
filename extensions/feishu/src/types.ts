@@ -1,4 +1,4 @@
-import type { BaseProbeResult } from "openclaw/plugin-sdk/feishu";
+import type { BaseProbeResult } from "openclaw/plugin-sdk";
 import type {
   FeishuConfigSchema,
   FeishuGroupSchema,
@@ -60,22 +60,6 @@ export type FeishuSendResult = {
   chatId: string;
 };
 
-export type FeishuChatType = "p2p" | "group" | "private";
-
-export type FeishuMessageInfo = {
-  messageId: string;
-  chatId: string;
-  chatType?: FeishuChatType;
-  senderId?: string;
-  senderOpenId?: string;
-  senderType?: string;
-  content: string;
-  contentType: string;
-  createTime?: number;
-  /** Feishu thread ID (omt_xxx) — present when the message belongs to a topic thread. */
-  threadId?: string;
-};
-
 export type FeishuProbeResult = BaseProbeResult<string> & {
   appId?: string;
   botName?: string;
@@ -91,10 +75,21 @@ export type FeishuMediaInfo = {
 export type FeishuToolsConfig = {
   doc?: boolean;
   chat?: boolean;
+  message?: boolean;
   wiki?: boolean;
   drive?: boolean;
   perm?: boolean;
   scopes?: boolean;
+  task?: boolean;
+};
+
+/** Persisted user OAuth token data for user_access_token APIs. */
+export type FeishuUserToken = {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+  openId: string;
+  obtainedAt: number;
 };
 
 export type DynamicAgentCreationConfig = {

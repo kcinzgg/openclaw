@@ -1,11 +1,11 @@
-import type { ClawdbotConfig, RuntimeEnv } from "openclaw/plugin-sdk/feishu";
+import type { ClawdbotConfig, RuntimeEnv } from "openclaw/plugin-sdk";
 import { listEnabledFeishuAccounts, resolveFeishuAccount } from "./accounts.js";
 import {
   monitorSingleAccount,
   resolveReactionSyntheticEvent,
   type FeishuReactionCreatedEvent,
 } from "./monitor.account.js";
-import { fetchBotIdentityForMonitor } from "./monitor.startup.js";
+import { fetchBotOpenIdForMonitor } from "./monitor.startup.js";
 import {
   clearFeishuWebhookRateLimitStateForTest,
   getFeishuWebhookRateLimitStateSizeForTest,
@@ -66,7 +66,7 @@ export async function monitorFeishuProvider(opts: MonitorFeishuOpts = {}): Promi
     }
 
     // Probe sequentially so large multi-account startups do not burst Feishu's bot-info endpoint.
-    const { botOpenId, botName } = await fetchBotIdentityForMonitor(account, {
+    const botOpenId = await fetchBotOpenIdForMonitor(account, {
       runtime: opts.runtime,
       abortSignal: opts.abortSignal,
     });
@@ -82,7 +82,7 @@ export async function monitorFeishuProvider(opts: MonitorFeishuOpts = {}): Promi
         account,
         runtime: opts.runtime,
         abortSignal: opts.abortSignal,
-        botOpenIdSource: { kind: "prefetched", botOpenId, botName },
+        botOpenIdSource: { kind: "prefetched", botOpenId },
       }),
     );
   }
