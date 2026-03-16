@@ -7,12 +7,12 @@ import type {
   WizardPrompter,
 } from "openclaw/plugin-sdk";
 import {
-  addWildcardAllowFrom,
   DEFAULT_ACCOUNT_ID,
   formatDocsLink,
   hasConfiguredSecretInput,
   promptSingleChannelSecretInput,
 } from "openclaw/plugin-sdk";
+import { addWildcardAllowFrom } from "../../../src/channels/plugins/setup-wizard-helpers.js";
 import { resolveFeishuCredentials } from "./accounts.js";
 import { probeFeishu } from "./probe.js";
 import type { FeishuConfig } from "./types.js";
